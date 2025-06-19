@@ -42,7 +42,8 @@ RenderSettings:
 --- !u!157 &3
 LightmapSettings:
   m_ObjectHideFlags: 0
-  serializedVersion: 12
+  serializedVersion: 13
+  m_BakeOnSceneLoad: 0
   m_GISettings:
     serializedVersion: 2
     m_BounceScale: 1
@@ -5137,6 +5138,12 @@ Transform:
   m_Children: []
   m_Father: {fileID: 769561447}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &1714960921 stripped
+BoxCollider:
+  m_CorrespondingSourceObject: {fileID: 1011351982797237500, guid: 39d7c261a411f2a4ca57fbccd8dd4309,
+    type: 3}
+  m_PrefabInstance: {fileID: 143669078377785433}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1720300980
 GameObject:
   m_ObjectHideFlags: 0
@@ -6408,6 +6415,16 @@ PrefabInstance:
       objectReference: {fileID: 1964602099}
     - target: {fileID: 4848851067754593339, guid: 39d7c261a411f2a4ca57fbccd8dd4309,
         type: 3}
+      propertyPath: maxAmmo
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 4848851067754593339, guid: 39d7c261a411f2a4ca57fbccd8dd4309,
+        type: 3}
+      propertyPath: fireRate
+      value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4848851067754593339, guid: 39d7c261a411f2a4ca57fbccd8dd4309,
+        type: 3}
       propertyPath: joystick
       value: 
       objectReference: {fileID: 326680631}
@@ -6421,6 +6438,11 @@ PrefabInstance:
       propertyPath: audioManager
       value: 
       objectReference: {fileID: 196532615}
+    - target: {fileID: 4848851067754593339, guid: 39d7c261a411f2a4ca57fbccd8dd4309,
+        type: 3}
+      propertyPath: shipCollider
+      value: 
+      objectReference: {fileID: 1714960921}
     - target: {fileID: 5430304578005732090, guid: 39d7c261a411f2a4ca57fbccd8dd4309,
         type: 3}
       propertyPath: m_Name

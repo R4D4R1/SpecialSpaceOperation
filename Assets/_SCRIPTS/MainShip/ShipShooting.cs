@@ -1,13 +1,19 @@
 using DG.Tweening;
 using System;
-using System.Collections;
+using System.Threading;
 using UnityEngine;
+using Cysharp.Threading.Tasks;
 
 public class ShipShooting : MonoBehaviour
 {
     public static ShipShooting Instance;
 
-    [Space(5)]
+    public enum AmmoType
+    {
+        Bullet,
+        Shotgun
+    }
+
     [Header("Ammo")]
     [SerializeField] private GameObject bulletPrefab;
     [SerializeField] private float bulletSpeed;
@@ -17,26 +23,20 @@ public class ShipShooting : MonoBehaviour
     [SerializeField] private Transform barrelTransform;
     [SerializeField] private int maxAmmo = 100;
 
-    // 0 - bullet
-    // 1 - shotgun
-    [SerializeField] private int ammoType = 0;
-
-    [Space(5)]
     [Header("Joystick")]
     [SerializeField] private Joystick joystick;
 
-    [Space(5)]
     [Header("Extra")]
     [SerializeField] private GameManager gameManager;
     [SerializeField] private AudioManager audioManager;
-    [SerializeField] private Collider _shipCollider;
+    [SerializeField] private Collider shipCollider;
 
     public Action<int> OnAmmoCapacityChanged;
 
-
-    private int _currentAmmo = 0;
-    private bool _isFireable = true;
-    private bool _gunIsLoading = true;
+    private int currentAmmo;
+    private bool isFireable = true;
+    private bool isShooting = false;
+    private AmmoType currentAmmoType = AmmoType.Bullet;
 
     private void Awake()
     {
@@ -52,136 +52,123 @@ public class ShipShooting : MonoBehaviour
 
     private void Start()
     {
-        // UI Setting
-        _currentAmmo = maxAmmo;
-        OnAmmoCapacityChanged?.Invoke(_currentAmmo);
+        currentAmmo = maxAmmo;
+        OnAmmoCapacityChanged?.Invoke(currentAmmo);
+        StartAmmoReloadLoop().Forget();
     }
 
-
-    void Update()
+    private void Update()
     {
-        if (joystick.Direction.magnitude > 0.5f && joystick.Direction.y > 0 && _isFireable && !gameManager.GameOver) 
+        if (joystick.Direction.magnitude > 0.5f && joystick.Direction.y > 0 && isFireable && !gameManager.GameOver)
         {
-            if (ammoType == 0 && _currentAmmo > 0)
+            switch (currentAmmoType)
             {
-                StartCoroutine(ShootRegularBullet());
-            }
+                case AmmoType.Bullet:
+                    if (currentAmmo > 0)
+                        ShootRegularBulletAsync().Forget();
+                    break;
 
-            if (ammoType == 1 && _currentAmmo > 4)
-            {
-                StartCoroutine(ShootWaveBullet());
+                case AmmoType.Shotgun:
+                    if (currentAmmo >= 3)
+                        ShootWaveBulletAsync().Forget();
+                    break;
             }
-        }
-
-        //Loading Gun
-        if (Input.touchCount == 0 && _currentAmmo < maxAmmo && !_gunIsLoading)
-        {
-            _gunIsLoading = true;
-            StartCoroutine(StartLoadingGun());
         }
     }
 
-    IEnumerator ShootRegularBullet()
+    private async UniTask ShootRegularBulletAsync()
     {
-        //Start state of gun
-        _gunIsLoading = false;
-        _currentAmmo--;
-        _isFireable = false;
+        if (!isFireable || isShooting) return;
 
-        // Update UI
-        OnAmmoCapacityChanged?.Invoke(_currentAmmo);
+        isShooting = true;
+        isFireable = false;
 
-        //Create Bullet
-        GameObject newBullet = PoolManager.Instance.GetPooledObject(0,barrelTransform.position);
+        currentAmmo--;
+        OnAmmoCapacityChanged?.Invoke(currentAmmo);
 
-        newBullet.GetComponent<TrailRenderer>().Clear();
+        GameObject bullet = PoolManager.Instance.GetPooledObject(0, barrelTransform.position);
+        bullet.GetComponent<TrailRenderer>().Clear();
 
-        newBullet.GetComponent<Rigidbody>().
-            AddForce(new Vector3(joystick.Direction.x, 0, joystick.Direction.y).normalized
-            * bulletSpeed, ForceMode.Impulse);
+        Vector3 direction = new Vector3(joystick.Direction.x, 0, joystick.Direction.y).normalized;
+        bullet.GetComponent<Rigidbody>().AddForce(direction * bulletSpeed, ForceMode.Impulse);
 
-        StartCoroutine(FireRateOperation());
+        audioManager.PlayShipShotClip((int)currentAmmoType);
 
-        //Sound
-        audioManager.PlayShipShotClip(ammoType);
+        await UniTask.Delay(TimeSpan.FromSeconds(fireRate));
 
-        yield return null;
+        isFireable = true;
+        isShooting = false;
     }
 
-    IEnumerator ShootWaveBullet()
+    private async UniTask ShootWaveBulletAsync()
     {
-        //Start state of gun
-        _gunIsLoading = false;
-        _currentAmmo -= 5;
-        _isFireable = false;
+        if (!isFireable || isShooting) return;
 
-        // Update UI
-        OnAmmoCapacityChanged?.Invoke(_currentAmmo);
+        isShooting = true;
+        isFireable = false;
 
-        //Create Bullet
-        GameObject Bullet1 = PoolManager.Instance.GetPooledObject(0, barrelTransform.position);
-        GameObject Bullet2 = PoolManager.Instance.GetPooledObject(0, barrelTransform.position);
-        GameObject Bullet3 = PoolManager.Instance.GetPooledObject(0, barrelTransform.position);
+        currentAmmo -= 3;
+        OnAmmoCapacityChanged?.Invoke(currentAmmo);
 
-        Bullet1.GetComponent<TrailRenderer>().Clear();
-        Bullet2.GetComponent<TrailRenderer>().Clear();
-        Bullet3.GetComponent<TrailRenderer>().Clear();
+        Vector3 direction = new Vector3(joystick.Direction.x, 0, joystick.Direction.y).normalized;
 
-        Bullet1.GetComponent<Rigidbody>().
-           AddForce(shotgunSpeed * new Vector3(joystick.Direction.x - .2f, 0, joystick.Direction.y).normalized, ForceMode.Impulse);
+        SpawnWaveBullet(direction + new Vector3(-0.2f, 0, 0));
+        SpawnWaveBullet(direction);
+        SpawnWaveBullet(direction + new Vector3(0.2f, 0, 0));
 
-        Bullet2.GetComponent<Rigidbody>().
-           AddForce(shotgunSpeed * new Vector3(joystick.Direction.x, 0, joystick.Direction.y).normalized, ForceMode.Impulse);
+        audioManager.PlayShipShotClip((int)currentAmmoType);
 
-        Bullet3.GetComponent<Rigidbody>().
-           AddForce(shotgunSpeed * new Vector3(joystick.Direction.x + .2f, 0, joystick.Direction.y).normalized, ForceMode.Impulse);
+        await UniTask.Delay(TimeSpan.FromSeconds(fireRate));
 
-        StartCoroutine(FireRateOperation());
-
-        //Sound
-        audioManager.PlayShipShotClip(ammoType);
-
-        yield return null;
+        isFireable = true;
+        isShooting = false;
     }
 
-    IEnumerator FireRateOperation()
+    private void SpawnWaveBullet(Vector3 direction)
     {
-        yield return new WaitForSeconds(fireRate);
-        _isFireable = true;
+        GameObject bullet = PoolManager.Instance.GetPooledObject(0, barrelTransform.position);
+        bullet.GetComponent<TrailRenderer>().Clear();
+        bullet.GetComponent<Rigidbody>().AddForce(direction.normalized * shotgunSpeed, ForceMode.Impulse);
     }
 
-    IEnumerator StartLoadingGun()
+    private async UniTaskVoid StartAmmoReloadLoop()
     {
-        yield return new WaitForSeconds(loadingTime);
-        _currentAmmo++;
-        OnAmmoCapacityChanged?.Invoke(_currentAmmo);
-        _gunIsLoading = false;
+        var token = this.GetCancellationTokenOnDestroy();
+
+        while (!token.IsCancellationRequested)
+        {
+            await UniTask.Delay(TimeSpan.FromSeconds(loadingTime), cancellationToken: token);
+
+            bool joystickIdle = joystick.Direction.magnitude < 0.5f || joystick.Direction.y <= 0.1f;
+
+            if (joystickIdle && currentAmmo < maxAmmo)
+            {
+                currentAmmo++;
+                OnAmmoCapacityChanged?.Invoke(currentAmmo);
+            }
+        }
     }
 
-   
     public void DisableShooting()
     {
         joystick.gameObject.SetActive(false);
-        _shipCollider.enabled = false;
+        shipCollider.enabled = false;
         audioManager.TurnOffEngine();
     }
 
-
-    // EXTRA
-
-    public void ChangeAmmoType(int ammoType)
+    public void ChangeAmmoType(int ammoTypeIndex)
     {
-        this.ammoType = ammoType;
-    } 
+        currentAmmoType = (AmmoType)ammoTypeIndex;
+    }
 
     public void StartFly(float startTimeFlight)
     {
-        gameObject.transform.DOMoveZ(1.5f, startTimeFlight);
+        transform.DOMoveZ(1.5f, startTimeFlight);
         audioManager.TurnOnEngine(startTimeFlight);
     }
 
     public Collider GetCollider()
     {
-        return _shipCollider;
+        return shipCollider;
     }
 }

@@ -1,10 +1,9 @@
 using DG.Tweening;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-
+using Cysharp.Threading.Tasks;
 
 public class GameManager : MonoBehaviour
 {
@@ -16,11 +15,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] private List<Obstacle> obstacles;
 
     public int _asteroidAmountShot { get; private set; } = 0;
-
     public Action<int> OnAsteroidDestroyedAmountChanged;
-
     public bool GameOver { get; private set; } = false;
-
 
     private void Awake()
     {
@@ -50,6 +46,7 @@ public class GameManager : MonoBehaviour
             item.OnAsteroidDestroyed += AsteroidDestroyed;
         }
     }
+
     private void OnDisable()
     {
         foreach (Obstacle item in obstacles)
@@ -66,16 +63,18 @@ public class GameManager : MonoBehaviour
 
     public void StartGameOver()
     {
-        StartCoroutine(GameOverCoroutine());
+        GameOverCoroutineAsync().Forget();
     }
 
-    IEnumerator GameOverCoroutine()
+    private async UniTaskVoid GameOverCoroutineAsync()
     {
         GameOver = true;
         SpawnerAsteroid.Instance.StopAllCoroutines();
         ShipShooting.Instance.DisableShooting();
+
         canvasGroup.DOFade(1, fadeTime);
-        yield return new WaitForSeconds(fadeTime);
+        await UniTask.Delay(TimeSpan.FromSeconds(fadeTime));
+
         canvasGroup.interactable = true;
         canvasGroup.blocksRaycasts = true;
     }
@@ -87,13 +86,13 @@ public class GameManager : MonoBehaviour
 
     public void StartGame()
     {
-        StartCoroutine(StartGameCoroutine());
+        StartGameCoroutineAsync().Forget();
     }
 
-    IEnumerator StartGameCoroutine()
+    private async UniTaskVoid StartGameCoroutineAsync()
     {
         ShipShooting.Instance.StartFly(startTime);
-        yield return new WaitForSeconds(startTime);
+        await UniTask.Delay(TimeSpan.FromSeconds(startTime));
         SpawnerAsteroid.Instance.StartAsteroids();
         SpawnerHP.Instance.StartSpecial();
     }
